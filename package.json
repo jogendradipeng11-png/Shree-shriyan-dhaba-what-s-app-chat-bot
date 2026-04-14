@@ -1,6 +1,7 @@
 {
-  "name": "shree-shriyan-dhaba-whatsapp-bot",
+  "name": "shree-shriyan-dhaba-what-s-app-chat-bot",
   "version": "1.0.0",
+  "description": "WhatsApp Chat Bot for Shree Shriyan Dhaba",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -8,7 +9,6 @@
   "dependencies": {
     "express": "^4.19.2",
     "firebase-admin": "^12.0.0",
-    "dotenv": "^16.4.5",
-    "axios": "^1.7.2"
+    "dotenv": "^16.4.5"
   }
 }

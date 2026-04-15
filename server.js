@@ -1,18 +1,13 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Render Fixed) ======================
 require('dotenv').config();
 const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
-const path = require('path');
 
 const app = express();
-app.use(express.static('public'));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ====================== FIREBASE ======================
+// Firebase Setup
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
@@ -24,119 +19,57 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP CLIENT (Optimized for Render) ======================
-const client = new Client({
-  authStrategy: new LocalAuth({ 
-    dataPath: './.wwebjs_auth' 
-  }),
-  puppeteer: {
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu',
-      '--disable-extensions'
-    ],
-    headless: true,
-    timeout: 0,
-    ignoreDefaultArgs: ['--disable-extensions']
-  }
-});
+// Webhook to receive orders from Evolution API
+app.post('/webhook/order', async (req, res) => {
+  try {
+    const data = req.body;
 
-client.on('qr', (qr) => {
-  console.log('\n\n');
-  console.log('╔════════════════════════════════════════════════════════════╗');
-  console.log('║           🔥 SHREE & SHRIYAN DHABA WHATSAPP BOT            ║');
-  console.log('║               SCAN QR TO CONNECT YOUR NUMBER               ║');
-  console.log('╚════════════════════════════════════════════════════════════╝');
-  console.log('\nSteps:');
-  console.log('1. Open WhatsApp on your phone');
-  console.log('2. Go to Settings → Linked Devices');
-  console.log('3. Tap "Link a Device"');
-  console.log('4. Scan the QR code below\n');
-
-  qrcode.generate(qr, { small: false });
-
-  console.log('\nScan quickly - QR expires soon');
-  console.log('════════════════════════════════════════════════════════════\n');
-});
-
-client.on('ready', () => {
-  console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
-});
-
-client.on('message', async (msg) => {
-  const text = msg.body.toLowerCase().trim();
-  const from = msg.from;
-
-  if (text === 'menu' || text === 'मेनू') {
-    const snap = await db.ref('menu').once('value');
-    let reply = '🍛 *Shree & Shriyan Dhaba Menu*\n\n';
-    Object.values(snap.val() || {}).forEach(i => {
-      reply += `• ${i.name_en} - ₹${i.price}\n`;
-    });
-    reply += '\nReply: ORDER Dal Tadka 2';
-    msg.reply(reply);
-  } 
-  else if (text.startsWith('order ')) {
-    const orderId = Date.now();
     const orderData = {
-      id: orderId,
-      customer: from,
-      name: "WhatsApp Customer",
-      table: "WhatsApp",
-      items: [{ name_en: text.replace('order ', ''), qty: 1, price: 150 }],
-      total: 150,
+      id: Date.now(),
+      table: data.table || "WhatsApp",
+      name: data.name || "Customer",
+      items: data.items || [],
+      total: data.total || 0,
       timestamp: new Date().toLocaleString(),
       status: "pending",
-      type: "whatsapp_order"
+      type: "whatsapp_order",
+      source: "evolution-api"
     };
-    await db.ref('tableOrders/' + orderId).set(orderData);
-    msg.reply(`✅ Order Placed! ID: ${orderId}\nKitchen notified.`);
-  } 
-  else if (text === 'cash' || text === 'कैश') {
-    msg.reply('💵 Cash request sent to staff. Please wait.');
+
+    await db.ref('tableOrders/' + orderData.id).set(orderData);
+
+    console.log('✅ Order saved from WhatsApp:', orderData);
+
+    res.json({ success: true, message: "Order saved to kitchen" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-client.initialize();
+app.post('/webhook/cash', async (req, res) => {
+  try {
+    const data = req.body;
+    const cashData = {
+      id: Date.now(),
+      table: data.table || "WhatsApp",
+      name: data.name || "Customer",
+      items: data.items || [],
+      total: data.total || 0,
+      timestamp: new Date().toLocaleString(),
+      type: "cash_payment_notification",
+      status: "cash_pending"
+    };
 
-// ====================== ROUTES ======================
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
-});
+    await db.ref('tableOrders/' + cashData.id).set(cashData);
 
-app.get('/admin', (req, res) => {
-  res.send(`
-    <h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
-    <h2>Live Orders</h2>
-    <div id="orders" style="padding:20px;"></div>
-    <script>
-      setInterval(async () => {
-        const res = await fetch('/api/orders');
-        const data = await res.json();
-        let html = '';
-        Object.keys(data).forEach(k => {
-          const o = data[k];
-          html += '<div style="background:#fff3e0;padding:15px;margin:10px;border-radius:12px;">' +
-                  '<strong>Table: ' + (o.table || 'WhatsApp') + '</strong> | ' + (o.name || '') +
-                  ' | ₹' + (o.total || 0) + '<br>Status: ' + (o.status || 'pending') + '</div>';
-        });
-        document.getElementById('orders').innerHTML = html || '<p>No orders yet</p>';
-      }, 3000);
-    </script>
-  `);
-});
-
-app.get('/api/orders', async (req, res) => {
-  const snap = await db.ref('tableOrders').once('value');
-  res.json(snap.val() || {});
+    console.log('💵 Cash request saved');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
 });
 
 app.listen(PORT, () => {
-  console.log('✅ Server running on port ' + PORT);
+  console.log(`✅ Webhook server running on port ${PORT}`);
 });

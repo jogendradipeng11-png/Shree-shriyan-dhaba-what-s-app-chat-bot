@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const admin = require('firebase-admin');   // ← Only once
+const admin = require('firebase-admin');
 const path = require('path');
 
 const app = express();
@@ -12,7 +12,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ====================== FIREBASE (Environment Variables) ======================
+// ====================== FIREBASE ======================
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
@@ -24,14 +24,14 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP GOAT BOT ======================
+// ====================== WHATSAPP BOT ======================
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
   puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
-client.on('qr', qr => {
-  console.log('🔥 Scan this QR with WhatsApp → Linked Devices');
+client.on('qr', (qr) => {
+  console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP (Linked Devices)');
   qrcode.generate(qr, { small: true });
 });
 
@@ -39,9 +39,11 @@ client.on('ready', () => {
   console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
 });
 
-client.on('message', async msg => {
+client.on('message', async (msg) => {
   const text = msg.body.toLowerCase().trim();
   const from = msg.from;
+
+  console.log(`📩 Message from ${from}: ${text}`);
 
   if (text === 'menu' || text === 'मेनू') {
     const snap = await db.ref('menu').once('value');
@@ -51,8 +53,7 @@ client.on('message', async msg => {
     });
     reply += '\nReply: ORDER Dal Tadka 2';
     msg.reply(reply);
-  }
-
+  } 
   else if (text.startsWith('order ')) {
     const orderId = Date.now();
     const orderData = {
@@ -69,8 +70,7 @@ client.on('message', async msg => {
     };
     await db.ref('tableOrders/' + orderId).set(orderData);
     msg.reply(`✅ Order Placed! ID: ${orderId}\nKitchen notified.`);
-  }
-
+  } 
   else if (text === 'cash' || text === 'कैश') {
     msg.reply('💵 Cash request sent to staff. Please wait.');
     const cashData = {
@@ -95,26 +95,20 @@ app.get('/', (req, res) => {
 });
 
 app.get('/admin', (req, res) => {
-  res.send(`
-    <h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
-    <h2>Live Orders (WhatsApp + Table)</h2>
-    <div id="orders" style="padding:20px;"></div>
+  res.send(`<h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
+    <h2>Live Orders</h2><div id="orders"></div>
     <script>
       setInterval(async () => {
         const res = await fetch('/api/orders');
         const data = await res.json();
-        let html = '';
-        Object.keys(data).forEach(k => {
+        document.getElementById('orders').innerHTML = Object.keys(data).map(k => {
           const o = data[k];
-          html += \`<div style="background:#fff3e0;padding:15px;margin:10px;border-radius:12px;">
-            <strong>Table: \${o.table || 'WhatsApp'}</strong> | \${o.name} | ₹\${o.total}<br>
-            Status: \${o.status}
-          </div>\`;
-        });
-        document.getElementById('orders').innerHTML = html || '<p>No orders yet</p>';
+          return `<div style="background:#fff3e0;padding:15px;margin:10px;border-radius:12px;">
+            <strong>Table: ${o.table || 'WhatsApp'}</strong> | ${o.name} | ₹${o.total}<br>Status: ${o.status}
+          </div>`;
+        }).join('') || '<p>No orders yet</p>';
       }, 3000);
-    </script>
-  `);
+    </script>`);
 });
 
 app.get('/api/orders', async (req, res) => {
@@ -123,5 +117,5 @@ app.get('/api/orders', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Full POS + GOAT WhatsApp Bot running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });

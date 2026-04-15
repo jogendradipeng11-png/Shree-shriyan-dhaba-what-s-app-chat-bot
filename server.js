@@ -7,7 +7,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Firebase Setup
+// Initialize Firebase
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
@@ -19,7 +19,7 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// Webhook to receive orders from Evolution API
+// Webhook for Orders from ManyChat
 app.post('/webhook/order', async (req, res) => {
   try {
     const data = req.body;
@@ -33,23 +33,25 @@ app.post('/webhook/order', async (req, res) => {
       timestamp: new Date().toLocaleString(),
       status: "pending",
       type: "whatsapp_order",
-      source: "evolution-api"
+      source: "manychat"
     };
 
     await db.ref('tableOrders/' + orderData.id).set(orderData);
 
-    console.log('✅ Order saved from WhatsApp:', orderData);
+    console.log('✅ Order received from ManyChat and saved to Firebase');
 
-    res.json({ success: true, message: "Order saved to kitchen" });
+    res.json({ success: true, message: "Order sent to kitchen" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false });
   }
 });
 
+// Webhook for Cash Payment Requests
 app.post('/webhook/cash', async (req, res) => {
   try {
     const data = req.body;
+
     const cashData = {
       id: Date.now(),
       table: data.table || "WhatsApp",
@@ -64,6 +66,7 @@ app.post('/webhook/cash', async (req, res) => {
     await db.ref('tableOrders/' + cashData.id).set(cashData);
 
     console.log('💵 Cash request saved');
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false });
@@ -71,5 +74,5 @@ app.post('/webhook/cash', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Webhook server running on port ${PORT}`);
+  console.log(`✅ Dhaba Webhook Server running on port ${PORT}`);
 });

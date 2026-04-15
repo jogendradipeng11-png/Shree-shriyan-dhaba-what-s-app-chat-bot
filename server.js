@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Optimized QR) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Final Working) ======================
 require('dotenv').config();
 const express = require('express');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -25,13 +25,13 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT (Optimized QR) ======================
+// ====================== WHATSAPP BOT ======================
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
 
   const sock = makeWASocket({
     auth: state,
-    logger: undefined,
+    logger: undefined,           // Keep it simple
     printQRInTerminal: false,
   });
 
@@ -39,29 +39,26 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('\n'.repeat(3));
+      console.log('\n\n');
       console.log('╔════════════════════════════════════════════════════════════╗');
-      console.log('║              🔥  SHREE & SHRIYAN DHABA BOT               ║');
-      console.log('║          SCAN THIS QR CODE TO CONNECT WHATSAPP           ║');
+      console.log('║           🔥  SHREE & SHRIYAN DHABA WHATSAPP BOT           ║');
+      console.log('║               SCAN QR TO CONNECT YOUR NUMBER               ║');
       console.log('╚════════════════════════════════════════════════════════════╝');
-      console.log('\n1. Open WhatsApp on your phone');
+      console.log('\nHow to scan:');
+      console.log('1. Open WhatsApp on your phone');
       console.log('2. Go to Settings → Linked Devices');
       console.log('3. Tap "Link a Device"');
       console.log('4. Scan the QR code below\n');
 
-      // Optimized QR - Bigger and clearer
-      qrcode.generate(qr, { 
-        small: false, 
-        scale: 4 
-      });
+      qrcode.generate(qr, { small: false });
 
-      console.log('\n📱 Scan the above QR code with your WhatsApp');
-      console.log('   (Make sure you are using the same number you want as bot)');
-      console.log('\n════════════════════════════════════════════════════════════\n');
+      console.log('\n⚠️  Scan quickly - QR expires in ~20 seconds');
+      console.log('If it expires, the bot will show a new one automatically.\n');
+      console.log('════════════════════════════════════════════════════════════\n');
     }
 
     if (connection === 'close') {
-      console.log('Connection closed. Reconnecting in 5 seconds...');
+      console.log('Connection closed. Reconnecting...');
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       if (shouldReconnect) {
         setTimeout(startBot, 5000);

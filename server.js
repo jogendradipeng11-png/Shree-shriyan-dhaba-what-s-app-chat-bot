@@ -1,10 +1,12 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Baileys) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Stable) ======================
 require('dotenv').config();
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
+const pino = require('pino');   // Simple logger
 
 const app = express();
 app.use(express.static('public'));
@@ -24,30 +26,30 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT (Baileys - No Chrome) ======================
-let sock;
-
+// ====================== WHATSAPP BOT ======================
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
 
-  sock = makeWASocket({
+  const sock = makeWASocket({
     auth: state,
-    printQRInTerminal: true,
-    logger: undefined
+    logger: pino({ level: 'silent' }),   // Fix for logger error
+    printQRInTerminal: false,            // We handle QR manually
   });
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP (Linked Devices)');
+      console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP → Linked Devices');
       qrcode.generate(qr, { small: true });
     }
 
     if (connection === 'close') {
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('Connection closed. Reconnecting...', shouldReconnect);
-      if (shouldReconnect) startBot();
+      if (shouldReconnect) {
+        console.log('Connection closed. Reconnecting in 5s...');
+        setTimeout(startBot, 5000);
+      }
     } else if (connection === 'open') {
       console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
     }
@@ -62,8 +64,6 @@ async function startBot() {
 
     const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').toLowerCase().trim();
     const from = msg.key.remoteJid;
-
-    console.log(`📩 Message from ${from}: ${text}`);
 
     if (text === 'menu' || text === 'मेनू') {
       const snap = await db.ref('menu').once('value');
@@ -85,8 +85,7 @@ async function startBot() {
         total: 150,
         timestamp: new Date().toLocaleString(),
         status: "pending",
-        type: "whatsapp_order",
-        lang: "hi"
+        type: "whatsapp_order"
       };
       await db.ref('tableOrders/' + orderId).set(orderData);
       await sock.sendMessage(from, { text: `✅ Order Placed! ID: ${orderId}\nKitchen notified.` });
@@ -111,9 +110,7 @@ async function startBot() {
 startBot();
 
 // ====================== ROUTES ======================
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
 app.get('/admin', (req, res) => {
   res.send(`
@@ -128,7 +125,7 @@ app.get('/admin', (req, res) => {
         Object.keys(data).forEach(k => {
           const o = data[k];
           html += '<div style="background:#fff3e0;padding:15px;margin:10px;border-radius:12px;">' +
-                  '<strong>Table: ' + (o.table || 'WhatsApp') + '</strong> | ' + (o.name || '') + 
+                  '<strong>Table: ' + (o.table || 'WhatsApp') + '</strong> | ' + (o.name || '') +
                   ' | ₹' + (o.total || 0) + '<br>Status: ' + (o.status || 'pending') + '</div>';
         });
         document.getElementById('orders').innerHTML = html || '<p>No orders yet</p>';

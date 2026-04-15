@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Fixed) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Optimized QR) ======================
 require('dotenv').config();
 const express = require('express');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -25,13 +25,13 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT ======================
+// ====================== WHATSAPP BOT (Optimized QR) ======================
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
 
   const sock = makeWASocket({
     auth: state,
-    logger: undefined,           // Simple fix - no pino needed
+    logger: undefined,
     printQRInTerminal: false,
   });
 
@@ -39,13 +39,25 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('\n\n🔥 === SCAN THIS QR CODE TO CONNECT YOUR WHATSAPP ===');
-      console.log('1. Open WhatsApp on your phone');
+      console.log('\n'.repeat(3));
+      console.log('╔════════════════════════════════════════════════════════════╗');
+      console.log('║              🔥  SHREE & SHRIYAN DHABA BOT               ║');
+      console.log('║          SCAN THIS QR CODE TO CONNECT WHATSAPP           ║');
+      console.log('╚════════════════════════════════════════════════════════════╝');
+      console.log('\n1. Open WhatsApp on your phone');
       console.log('2. Go to Settings → Linked Devices');
       console.log('3. Tap "Link a Device"');
       console.log('4. Scan the QR code below\n');
-      qrcode.generate(qr, { small: true });
-      console.log('\n==================================================\n');
+
+      // Optimized QR - Bigger and clearer
+      qrcode.generate(qr, { 
+        small: false, 
+        scale: 4 
+      });
+
+      console.log('\n📱 Scan the above QR code with your WhatsApp');
+      console.log('   (Make sure you are using the same number you want as bot)');
+      console.log('\n════════════════════════════════════════════════════════════\n');
     }
 
     if (connection === 'close') {

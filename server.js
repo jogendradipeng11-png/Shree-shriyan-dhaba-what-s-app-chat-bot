@@ -1,12 +1,10 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Fixed) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Final Stable) ======================
 require('dotenv').config();
 const express = require('express');
-const makeWASocket = require('@whiskeysockets/baileys').default;
-const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
-const pino = require('pino');
 
 const app = express();
 app.use(express.static('public'));
@@ -26,63 +24,67 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT ======================
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
+// ====================== WHATSAPP CLIENT ======================
+const client = new Client({
+  authStrategy: new LocalAuth({ 
+    dataPath: './.wwebjs_auth' 
+  }),
+  puppeteer: {
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    headless: true,
+    timeout: 0
+  }
+});
 
-  const sock = makeWASocket({
-    auth: state,
-    logger: pino({ level: 'silent' }),   // This fixes the logger.child error
-    printQRInTerminal: false,
-  });
+client.on('qr', (qr) => {
+  console.log('\n\n🔥 === SCAN THIS QR CODE TO CONNECT WHATSAPP ===');
+  console.log('1. Open WhatsApp on your phone');
+  console.log('2. Go to Settings > Linked Devices');
+  console.log('3. Tap "Link a Device"');
+  console.log('4. Scan the QR code below\n');
+  qrcode.generate(qr, { small: true });
+  console.log('\n==================================================\n');
+});
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
+client.on('ready', () => {
+  console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
+});
 
-    if (qr) {
-      console.log('\n\n🔥 === SCAN THIS QR CODE ===');
-      console.log('1. Open WhatsApp on your phone');
-      console.log('2. Go to Settings → Linked Devices');
-      console.log('3. Tap "Link a Device"');
-      console.log('4. Scan the QR code below\n');
-      qrcode.generate(qr, { small: true });
-      console.log('\n=====================================\n');
-    }
+client.on('message', async (msg) => {
+  const text = msg.body.toLowerCase().trim();
+  const from = msg.from;
 
-    if (connection === 'close') {
-      console.log('Connection closed. Reconnecting...');
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        setTimeout(startBot, 5000);
-      }
-    } else if (connection === 'open') {
-      console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
-    }
-  });
+  if (text === 'menu' || text === 'मेनू') {
+    const snap = await db.ref('menu').once('value');
+    let reply = '🍛 *Shree & Shriyan Dhaba Menu*\n\n';
+    Object.values(snap.val() || {}).forEach(i => {
+      reply += `• ${i.name_en} - ₹${i.price}\n`;
+    });
+    reply += '\nReply: ORDER Dal Tadka 2';
+    msg.reply(reply);
+  } 
+  else if (text.startsWith('order ')) {
+    const orderId = Date.now();
+    const orderData = {
+      id: orderId,
+      customer: from,
+      name: "WhatsApp Customer",
+      table: "WhatsApp",
+      items: [{ name_en: text.replace('order ', ''), qty: 1, price: 150 }],
+      total: 150,
+      timestamp: new Date().toLocaleString(),
+      status: "pending",
+      type: "whatsapp_order"
+    };
+    await db.ref('tableOrders/' + orderId).set(orderData);
+    msg.reply(`✅ Order Placed! ID: ${orderId}\nKitchen notified.`);
+  } 
+  else if (text === 'cash' || text === 'कैश') {
+    msg.reply('💵 Cash request sent to staff. Please wait.');
+  }
+});
 
-  sock.ev.on('creds.update', saveCreds);
-
-  // Simple message handler
-  sock.ev.on('messages.upsert', async (m) => {
-    const msg = m.messages[0];
-    if (!msg.message) return;
-
-    const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').toLowerCase().trim();
-    const from = msg.key.remoteJid;
-
-    if (text === 'menu' || text === 'मेनू') {
-      const snap = await db.ref('menu').once('value');
-      let reply = '🍛 *Shree & Shriyan Dhaba Menu*\n\n';
-      Object.values(snap.val() || {}).forEach(i => {
-        reply += `• ${i.name_en} - ₹${i.price}\n`;
-      });
-      reply += '\nReply: ORDER Dal Tadka 2';
-      await sock.sendMessage(from, { text: reply });
-    }
-  });
-}
-
-startBot();
+client.initialize();
 
 // ====================== ROUTES ======================
 app.get('/', (req, res) => {

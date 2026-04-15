@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Stable) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot ======================
 require('dotenv').config();
 const express = require('express');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -6,7 +6,6 @@ const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/bai
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
-const pino = require('pino');   // Simple logger
 
 const app = express();
 app.use(express.static('public'));
@@ -32,24 +31,24 @@ async function startBot() {
 
   const sock = makeWASocket({
     auth: state,
-    logger: pino({ level: 'silent' }),   // Fix for logger error
-    printQRInTerminal: false,            // We handle QR manually
+    logger: undefined,           // Simple fix
+    printQRInTerminal: false,    // We handle it manually
   });
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP → Linked Devices');
+      console.log('\n\n🔥 === SCAN THIS QR CODE ===');
+      console.log('Open WhatsApp → Settings → Linked Devices → Link a Device');
       qrcode.generate(qr, { small: true });
+      console.log('=====================================\n');
     }
 
     if (connection === 'close') {
+      console.log('Connection closed. Reconnecting...');
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        console.log('Connection closed. Reconnecting in 5s...');
-        setTimeout(startBot, 5000);
-      }
+      if (shouldReconnect) setTimeout(startBot, 5000);
     } else if (connection === 'open') {
       console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
     }
@@ -57,7 +56,7 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  // Message Handler
+  // Basic message handler
   sock.ev.on('messages.upsert', async (m) => {
     const msg = m.messages[0];
     if (!msg.message) return;
@@ -73,36 +72,6 @@ async function startBot() {
       });
       reply += '\nReply: ORDER Dal Tadka 2';
       await sock.sendMessage(from, { text: reply });
-    } 
-    else if (text.startsWith('order ')) {
-      const orderId = Date.now();
-      const orderData = {
-        id: orderId,
-        customer: from,
-        name: "WhatsApp Customer",
-        table: "WhatsApp",
-        items: [{ name_en: text.replace('order ', ''), qty: 1, price: 150 }],
-        total: 150,
-        timestamp: new Date().toLocaleString(),
-        status: "pending",
-        type: "whatsapp_order"
-      };
-      await db.ref('tableOrders/' + orderId).set(orderData);
-      await sock.sendMessage(from, { text: `✅ Order Placed! ID: ${orderId}\nKitchen notified.` });
-    } 
-    else if (text === 'cash' || text === 'कैश') {
-      await sock.sendMessage(from, { text: '💵 Cash request sent to staff. Please wait.' });
-      const cashData = {
-        id: Date.now(),
-        table: "WhatsApp",
-        name: "WhatsApp Customer",
-        items: [{ name_en: "Custom Order", qty: 1, price: 150 }],
-        total: 150,
-        timestamp: new Date().toLocaleString(),
-        type: "cash_payment_notification",
-        status: "cash_pending"
-      };
-      await db.ref('tableOrders/' + cashData.id).set(cashData);
     }
   });
 }
@@ -110,11 +79,12 @@ async function startBot() {
 startBot();
 
 // ====================== ROUTES ======================
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
 
 app.get('/admin', (req, res) => {
-  res.send(`
-    <h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
+  res.send(`<h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
     <h2>Live Orders</h2>
     <div id="orders" style="padding:20px;"></div>
     <script>
@@ -130,8 +100,7 @@ app.get('/admin', (req, res) => {
         });
         document.getElementById('orders').innerHTML = html || '<p>No orders yet</p>';
       }, 3000);
-    </script>
-  `);
+    </script>`);
 });
 
 app.get('/api/orders', async (req, res) => {

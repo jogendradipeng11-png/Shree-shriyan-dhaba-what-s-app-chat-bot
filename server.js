@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Final Stable - No Chrome) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Stable Final) ======================
 require('dotenv').config();
 const express = require('express');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -6,6 +6,7 @@ const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/bai
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
+const pino = require('pino');
 
 const app = express();
 app.use(express.static('public'));
@@ -25,13 +26,13 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT (Baileys - No Chrome) ======================
+// ====================== WHATSAPP BOT ======================
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
 
   const sock = makeWASocket({
     auth: state,
-    logger: undefined,
+    logger: pino({ level: 'silent' }),   // This is the key fix
     printQRInTerminal: false,
   });
 
@@ -39,7 +40,7 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('\n\n🔥 === SCAN THIS QR CODE TO CONNECT WHATSAPP ===');
+      console.log('\n\n🔥 === SCAN THIS QR CODE TO CONNECT YOUR WHATSAPP ===');
       console.log('1. Open WhatsApp on your phone');
       console.log('2. Go to Settings → Linked Devices');
       console.log('3. Tap "Link a Device"');
@@ -61,15 +62,12 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  // Message Handler
   sock.ev.on('messages.upsert', async (m) => {
     const msg = m.messages[0];
     if (!msg.message) return;
 
     const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').toLowerCase().trim();
     const from = msg.key.remoteJid;
-
-    console.log(`📩 Message from ${from}: ${text}`);
 
     if (text === 'menu' || text === 'मेनू') {
       const snap = await db.ref('menu').once('value');

@@ -11,12 +11,18 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ====================== FIREBASE ADMIN ======================
-const serviceAccount = require('./serviceAccountKey.json');
+// ====================== FIREBASE ADMIN (Using Environment Variables) ======================
+const admin = require('firebase-admin');
+
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  }),
   databaseURL: "https://dhaba-bills-default-rtdb.firebaseio.com"
 });
+
 const db = admin.database();
 
 // ====================== WHATSAPP GOAT BOT ======================

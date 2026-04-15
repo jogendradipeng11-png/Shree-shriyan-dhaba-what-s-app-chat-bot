@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Fixed) ======================
 require('dotenv').config();
 const express = require('express');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -6,6 +6,7 @@ const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/bai
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
+const pino = require('pino');
 
 const app = express();
 app.use(express.static('public'));
@@ -31,8 +32,8 @@ async function startBot() {
 
   const sock = makeWASocket({
     auth: state,
-    logger: undefined,           // Simple fix
-    printQRInTerminal: false,    // We handle it manually
+    logger: pino({ level: 'silent' }),   // This fixes the logger.child error
+    printQRInTerminal: false,
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -40,15 +41,20 @@ async function startBot() {
 
     if (qr) {
       console.log('\n\n🔥 === SCAN THIS QR CODE ===');
-      console.log('Open WhatsApp → Settings → Linked Devices → Link a Device');
+      console.log('1. Open WhatsApp on your phone');
+      console.log('2. Go to Settings → Linked Devices');
+      console.log('3. Tap "Link a Device"');
+      console.log('4. Scan the QR code below\n');
       qrcode.generate(qr, { small: true });
-      console.log('=====================================\n');
+      console.log('\n=====================================\n');
     }
 
     if (connection === 'close') {
       console.log('Connection closed. Reconnecting...');
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) setTimeout(startBot, 5000);
+      if (shouldReconnect) {
+        setTimeout(startBot, 5000);
+      }
     } else if (connection === 'open') {
       console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
     }
@@ -56,7 +62,7 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  // Basic message handler
+  // Simple message handler
   sock.ev.on('messages.upsert', async (m) => {
     const msg = m.messages[0];
     if (!msg.message) return;
@@ -84,7 +90,8 @@ app.get('/', (req, res) => {
 });
 
 app.get('/admin', (req, res) => {
-  res.send(`<h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
+  res.send(`
+    <h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
     <h2>Live Orders</h2>
     <div id="orders" style="padding:20px;"></div>
     <script>
@@ -100,7 +107,8 @@ app.get('/admin', (req, res) => {
         });
         document.getElementById('orders').innerHTML = html || '<p>No orders yet</p>';
       }, 3000);
-    </script>`);
+    </script>
+  `);
 });
 
 app.get('/api/orders', async (req, res) => {

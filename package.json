@@ -1,11 +1,15 @@
 {
-  "name": "dhaba-webhook",
+  "name": "shree-shriyan-dhaba-goat-whatsapp-bot",
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "whatsapp-web.js": "^1.25.0",
     "express": "^4.19.0",
-    "firebase-admin": "^12.0.0"
+    "firebase-admin": "^12.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "dotenv": "^16.4.0",
+    "body-parser": "^1.20.2"
   }
 }

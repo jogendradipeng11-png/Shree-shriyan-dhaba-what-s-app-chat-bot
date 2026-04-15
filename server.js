@@ -24,7 +24,7 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT ======================
+// ====================== WHATSAPP GOAT BOT ======================
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
   puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
@@ -95,20 +95,25 @@ app.get('/', (req, res) => {
 });
 
 app.get('/admin', (req, res) => {
-  res.send(`<h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
-    <h2>Live Orders</h2><div id="orders"></div>
+  res.send(`
+    <h1 style="text-align:center;color:#d84315;">🔥 Shree & Shriyan Dhaba - GOAT Admin Panel</h1>
+    <h2>Live Orders (WhatsApp + Table)</h2>
+    <div id="orders" style="padding:20px;"></div>
     <script>
       setInterval(async () => {
         const res = await fetch('/api/orders');
         const data = await res.json();
-        document.getElementById('orders').innerHTML = Object.keys(data).map(k => {
+        let html = '';
+        Object.keys(data).forEach(k => {
           const o = data[k];
-          return `<div style="background:#fff3e0;padding:15px;margin:10px;border-radius:12px;">
-            <strong>Table: ${o.table || 'WhatsApp'}</strong> | ${o.name} | ₹${o.total}<br>Status: ${o.status}
-          </div>`;
-        }).join('') || '<p>No orders yet</p>';
+          html += '<div style="background:#fff3e0;padding:15px;margin:10px;border-radius:12px;">' +
+                  '<strong>Table: ' + (o.table || 'WhatsApp') + '</strong> | ' + o.name + 
+                  ' | ₹' + o.total + '<br>Status: ' + o.status + '</div>';
+        });
+        document.getElementById('orders').innerHTML = html || '<p>No orders yet</p>';
       }, 3000);
-    </script>`);
+    </script>
+  `);
 });
 
 app.get('/api/orders', async (req, res) => {
@@ -117,5 +122,5 @@ app.get('/api/orders', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log('✅ Full POS + GOAT WhatsApp Bot running on port ' + PORT);
 });

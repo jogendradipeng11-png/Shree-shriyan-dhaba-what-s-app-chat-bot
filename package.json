@@ -1,6 +1,6 @@
 {
   "name": "
-Shree-shriyan-dhaba-what-s-app-chat-bot",
+dhaba-webhook",
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js"

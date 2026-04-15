@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Stable Final) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Fixed) ======================
 require('dotenv').config();
 const express = require('express');
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -6,7 +6,6 @@ const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/bai
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
-const pino = require('pino');
 
 const app = express();
 app.use(express.static('public'));
@@ -32,7 +31,7 @@ async function startBot() {
 
   const sock = makeWASocket({
     auth: state,
-    logger: pino({ level: 'silent' }),   // This is the key fix
+    logger: undefined,           // Simple fix - no pino needed
     printQRInTerminal: false,
   });
 
@@ -62,6 +61,7 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
+  // Message Handler
   sock.ev.on('messages.upsert', async (m) => {
     const msg = m.messages[0];
     if (!msg.message) return;

@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Final Stable) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot ======================
 require('dotenv').config();
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -24,24 +24,19 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP CLIENT ======================
+// ====================== WHATSAPP BOT ======================
 const client = new Client({
-  authStrategy: new LocalAuth({ 
-    dataPath: './.wwebjs_auth' 
-  }),
+  authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
   puppeteer: {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    headless: true,
-    timeout: 0
+    headless: true
   }
 });
 
 client.on('qr', (qr) => {
-  console.log('\n\n🔥 === SCAN THIS QR CODE TO CONNECT WHATSAPP ===');
-  console.log('1. Open WhatsApp on your phone');
-  console.log('2. Go to Settings > Linked Devices');
-  console.log('3. Tap "Link a Device"');
-  console.log('4. Scan the QR code below\n');
+  console.log('\n\n🔥 === SCAN THIS QR CODE TO CONNECT YOUR WHATSAPP ===');
+  console.log('Open WhatsApp on phone → Settings → Linked Devices → Link a Device');
+  console.log('Then scan the QR code below:\n');
   qrcode.generate(qr, { small: true });
   console.log('\n==================================================\n');
 });

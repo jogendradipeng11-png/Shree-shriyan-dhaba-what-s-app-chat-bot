@@ -1,8 +1,7 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Final Working) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Render Optimized) ======================
 require('dotenv').config();
 const express = require('express');
-const makeWASocket = require('@whiskeysockets/baileys').default;
-const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
 const path = require('path');
@@ -25,91 +24,85 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT ======================
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
+// ====================== WHATSAPP BOT (Optimized for Render) ======================
+const client = new Client({
+  authStrategy: new LocalAuth({ 
+    dataPath: './.wwebjs_auth' 
+  }),
+  puppeteer: {
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-gpu'
+    ],
+    headless: true,
+    timeout: 60000
+  }
+});
 
-  const sock = makeWASocket({
-    auth: state,
-    logger: undefined,           // Keep it simple
-    printQRInTerminal: false,
-  });
+client.on('qr', (qr) => {
+  console.log('\n\n');
+  console.log('╔════════════════════════════════════════════════════════════╗');
+  console.log('║           🔥  SHREE & SHRIYAN DHABA WHATSAPP BOT           ║');
+  console.log('║               SCAN QR TO CONNECT YOUR NUMBER               ║');
+  console.log('╚════════════════════════════════════════════════════════════╝');
+  console.log('\nHow to scan:');
+  console.log('1. Open WhatsApp on your phone');
+  console.log('2. Go to Settings → Linked Devices');
+  console.log('3. Tap "Link a Device"');
+  console.log('4. Scan the QR code below\n');
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
+  qrcode.generate(qr, { small: false });
 
-    if (qr) {
-      console.log('\n\n');
-      console.log('╔════════════════════════════════════════════════════════════╗');
-      console.log('║           🔥  SHREE & SHRIYAN DHABA WHATSAPP BOT           ║');
-      console.log('║               SCAN QR TO CONNECT YOUR NUMBER               ║');
-      console.log('╚════════════════════════════════════════════════════════════╝');
-      console.log('\nHow to scan:');
-      console.log('1. Open WhatsApp on your phone');
-      console.log('2. Go to Settings → Linked Devices');
-      console.log('3. Tap "Link a Device"');
-      console.log('4. Scan the QR code below\n');
+  console.log('\n⚡ Scan quickly - QR expires in ~20-30 seconds');
+  console.log('If it expires, the bot will show a new one automatically.\n');
+  console.log('════════════════════════════════════════════════════════════\n');
+});
 
-      qrcode.generate(qr, { small: false });
+client.on('ready', () => {
+  console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
+});
 
-      console.log('\n⚠️  Scan quickly - QR expires in ~20 seconds');
-      console.log('If it expires, the bot will show a new one automatically.\n');
-      console.log('════════════════════════════════════════════════════════════\n');
-    }
+client.on('message', async (msg) => {
+  const text = msg.body.toLowerCase().trim();
+  const from = msg.from;
 
-    if (connection === 'close') {
-      console.log('Connection closed. Reconnecting...');
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        setTimeout(startBot, 5000);
-      }
-    } else if (connection === 'open') {
-      console.log('🚀 GOAT WhatsApp Bot is LIVE and Connected!');
-    }
-  });
+  if (text === 'menu' || text === 'मेनू') {
+    const snap = await db.ref('menu').once('value');
+    let reply = '🍛 *Shree & Shriyan Dhaba Menu*\n\n';
+    Object.values(snap.val() || {}).forEach(i => {
+      reply += `• ${i.name_en} - ₹${i.price}\n`;
+    });
+    reply += '\nReply: ORDER Dal Tadka 2';
+    msg.reply(reply);
+  } 
+  else if (text.startsWith('order ')) {
+    const orderId = Date.now();
+    const orderData = {
+      id: orderId,
+      customer: from,
+      name: "WhatsApp Customer",
+      table: "WhatsApp",
+      items: [{ name_en: text.replace('order ', ''), qty: 1, price: 150 }],
+      total: 150,
+      timestamp: new Date().toLocaleString(),
+      status: "pending",
+      type: "whatsapp_order"
+    };
+    await db.ref('tableOrders/' + orderId).set(orderData);
+    msg.reply(`✅ Order Placed! ID: ${orderId}\nKitchen notified.`);
+  } 
+  else if (text === 'cash' || text === 'कैश') {
+    msg.reply('💵 Cash request sent to staff. Please wait.');
+  }
+});
 
-  sock.ev.on('creds.update', saveCreds);
-
-  // Message Handler
-  sock.ev.on('messages.upsert', async (m) => {
-    const msg = m.messages[0];
-    if (!msg.message) return;
-
-    const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').toLowerCase().trim();
-    const from = msg.key.remoteJid;
-
-    if (text === 'menu' || text === 'मेनू') {
-      const snap = await db.ref('menu').once('value');
-      let reply = '🍛 *Shree & Shriyan Dhaba Menu*\n\n';
-      Object.values(snap.val() || {}).forEach(i => {
-        reply += `• ${i.name_en} - ₹${i.price}\n`;
-      });
-      reply += '\nReply: ORDER Dal Tadka 2';
-      await sock.sendMessage(from, { text: reply });
-    } 
-    else if (text.startsWith('order ')) {
-      const orderId = Date.now();
-      const orderData = {
-        id: orderId,
-        customer: from,
-        name: "WhatsApp Customer",
-        table: "WhatsApp",
-        items: [{ name_en: text.replace('order ', ''), qty: 1, price: 150 }],
-        total: 150,
-        timestamp: new Date().toLocaleString(),
-        status: "pending",
-        type: "whatsapp_order"
-      };
-      await db.ref('tableOrders/' + orderId).set(orderData);
-      await sock.sendMessage(from, { text: `✅ Order Placed! ID: ${orderId}\nKitchen notified.` });
-    } 
-    else if (text === 'cash' || text === 'कैश') {
-      await sock.sendMessage(from, { text: '💵 Cash request sent to staff. Please wait.' });
-    }
-  });
-}
-
-startBot();
+client.initialize();
 
 // ====================== ROUTES ======================
 app.get('/', (req, res) => {

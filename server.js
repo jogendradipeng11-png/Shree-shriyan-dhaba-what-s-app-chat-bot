@@ -1,5 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - Webhook Server for ManyChat ======================
-require('dotenv').config();
+// ====================== Shree & Shriyan Dhaba - ManyChat Webhook Server ======================
 const express = require('express');
 const admin = require('firebase-admin');
 
@@ -20,9 +19,9 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WEBHOOK FOR MANYCHAT ======================
+// ====================== WEBHOOKS FOR MANYCHAT ======================
 
-// Receive Orders from ManyChat
+// Order Webhook
 app.post('/webhook/order', async (req, res) => {
   try {
     const data = req.body;
@@ -41,16 +40,16 @@ app.post('/webhook/order', async (req, res) => {
 
     await db.ref('tableOrders/' + orderData.id).set(orderData);
 
-    console.log('✅ Order received from ManyChat and saved to Firebase');
+    console.log('✅ Order saved from ManyChat');
 
     res.json({ success: true, message: "Order sent to kitchen" });
   } catch (err) {
-    console.error('Order webhook error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 });
 
-// Receive Cash Payment Requests from ManyChat
+// Cash Request Webhook
 app.post('/webhook/cash', async (req, res) => {
   try {
     const data = req.body;
@@ -68,16 +67,15 @@ app.post('/webhook/cash', async (req, res) => {
 
     await db.ref('tableOrders/' + cashData.id).set(cashData);
 
-    console.log('💵 Cash request received and saved');
+    console.log('💵 Cash request saved');
 
     res.json({ success: true });
   } catch (err) {
-    console.error('Cash webhook error:', err);
     res.status(500).json({ success: false });
   }
 });
 
-// Health check
+// Health Check
 app.get('/', (req, res) => {
   res.send('✅ Dhaba Webhook Server is Running! Ready for ManyChat.');
 });

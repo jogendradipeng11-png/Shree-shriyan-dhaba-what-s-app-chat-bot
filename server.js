@@ -1,4 +1,4 @@
-// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Render Optimized) ======================
+// ====================== Shree & Shriyan Dhaba - GOAT WhatsApp Bot (Render Fixed) ======================
 require('dotenv').config();
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -24,7 +24,7 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ====================== WHATSAPP BOT (Optimized for Render) ======================
+// ====================== WHATSAPP CLIENT (Optimized for Render) ======================
 const client = new Client({
   authStrategy: new LocalAuth({ 
     dataPath: './.wwebjs_auth' 
@@ -38,20 +38,22 @@ const client = new Client({
       '--no-first-run',
       '--no-zygote',
       '--single-process',
-      '--disable-gpu'
+      '--disable-gpu',
+      '--disable-extensions'
     ],
     headless: true,
-    timeout: 60000
+    timeout: 0,
+    ignoreDefaultArgs: ['--disable-extensions']
   }
 });
 
 client.on('qr', (qr) => {
   console.log('\n\n');
   console.log('╔════════════════════════════════════════════════════════════╗');
-  console.log('║           🔥  SHREE & SHRIYAN DHABA WHATSAPP BOT           ║');
+  console.log('║           🔥 SHREE & SHRIYAN DHABA WHATSAPP BOT            ║');
   console.log('║               SCAN QR TO CONNECT YOUR NUMBER               ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
-  console.log('\nHow to scan:');
+  console.log('\nSteps:');
   console.log('1. Open WhatsApp on your phone');
   console.log('2. Go to Settings → Linked Devices');
   console.log('3. Tap "Link a Device"');
@@ -59,8 +61,7 @@ client.on('qr', (qr) => {
 
   qrcode.generate(qr, { small: false });
 
-  console.log('\n⚡ Scan quickly - QR expires in ~20-30 seconds');
-  console.log('If it expires, the bot will show a new one automatically.\n');
+  console.log('\nScan quickly - QR expires soon');
   console.log('════════════════════════════════════════════════════════════\n');
 });
 

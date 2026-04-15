@@ -1,85 +1,81 @@
-// ====================== Shree & Shriyan Dhaba - ManyChat Webhook Server ======================
+require('dotenv').config();
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
-const admin = require('firebase-admin');
-
+const qrcode = require('qrcode-terminal');
+const db = require('./firebase-config');
 const app = express();
+app.use(express.static('public')); // admin panel files
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ====================== FIREBASE ======================
-admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  }),
-  databaseURL: "https://dhaba-bills-default-rtdb.firebaseio.com"
+// WhatsApp Client (Multi-device, QR once only)
+const client = new Client({
+  authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }), // session save होता है
+  puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
-const db = admin.database();
+client.on('qr', qr => {
+  console.log('Scan this QR with WhatsApp → Linked Devices');
+  qrcode.generate(qr, { small: true });
+});
 
-// ====================== WEBHOOKS FOR MANYCHAT ======================
+client.on('ready', () => {
+  console.log('🚀 GOAT WhatsApp Bot is READY!');
+});
 
-// Order Webhook
-app.post('/webhook/order', async (req, res) => {
-  try {
-    const data = req.body;
+// Message Handler (Dhaba Specific)
+client.on('message', async message => {
+  const text = message.body.toLowerCase().trim();
+  const from = message.from;
 
+  if (text === 'menu' || text === 'मेनू') {
+    const menuSnap = await db.ref('menu').once('value');
+    let reply = '🍛 *Shree & Shriyan Dhaba Menu*\n\n';
+    Object.values(menuSnap.val() || {}).forEach(item => {
+      reply += `• ${item.name_en} - ₹${item.price}\n`;
+    });
+    reply += '\nReply: ORDER Dal Tadka 2';
+    message.reply(reply);
+  }
+
+  else if (text.startsWith('order ')) {
+    // Simple order processing (expand as needed)
+    const orderId = Date.now();
     const orderData = {
-      id: Date.now(),
-      table: data.table || "WhatsApp",
-      name: data.name || "Customer",
-      items: data.items || [],
-      total: data.total || 0,
+      id: orderId,
+      customer: from,
+      name: "WhatsApp Guest",
+      table: "WhatsApp",
+      items: [{ name_en: text.replace('order ', ''), qty: 1, price: 150 }],
+      total: 150,
       timestamp: new Date().toLocaleString(),
       status: "pending",
-      type: "whatsapp_order",
-      source: "manychat"
+      type: "whatsapp_order"
     };
+    await db.ref('tableOrders/' + orderId).set(orderData);
+    message.reply(`✅ Order Placed! ID: ${orderId}\nKitchen notified. Staff will come.`);
+  }
 
-    await db.ref('tableOrders/' + orderData.id).set(orderData);
-
-    console.log('✅ Order saved from ManyChat');
-
-    res.json({ success: true, message: "Order sent to kitchen" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+  else if (text === 'cash' || text === 'कैश') {
+    message.reply('💵 Cash request sent to staff. Please wait.');
+    // Same cash_notification as your existing POS
+    const cashData = { /* same as your notifyCashPaymentToStaff */ };
+    await db.ref('tableOrders/' + Date.now()).set(cashData);
   }
 });
 
-// Cash Request Webhook
-app.post('/webhook/cash', async (req, res) => {
-  try {
-    const data = req.body;
-
-    const cashData = {
-      id: Date.now(),
-      table: data.table || "WhatsApp",
-      name: data.name || "Customer",
-      items: data.items || [],
-      total: data.total || 0,
-      timestamp: new Date().toLocaleString(),
-      type: "cash_payment_notification",
-      status: "cash_pending"
-    };
-
-    await db.ref('tableOrders/' + cashData.id).set(cashData);
-
-    console.log('💵 Cash request saved');
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false });
-  }
+// ==================== ADMIN PANEL ====================
+app.get('/admin', (req, res) => {
+  res.sendFile(__dirname + '/public/admin.html');
 });
 
-// Health Check
-app.get('/', (req, res) => {
-  res.send('✅ Dhaba Webhook Server is Running! Ready for ManyChat.');
+// Live orders API for admin panel
+app.get('/api/orders', async (req, res) => {
+  const snap = await db.ref('tableOrders').once('value');
+  res.json(snap.val() || {});
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Webhook server running on port ${PORT}`);
-});
+client.initialize();
+
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));

@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const admin = require('firebase-admin');   // ← Only ONE time
+const admin = require('firebase-admin');   // ← Only once
 const path = require('path');
 
 const app = express();
@@ -12,7 +12,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ====================== FIREBASE (Using Render Environment Variables) ======================
+// ====================== FIREBASE (Environment Variables) ======================
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,

@@ -75,9 +75,9 @@ app.post('/webhook/cash', async (req, res) => {
   }
 });
 
-// Health Check
+// Health Check Route
 app.get('/', (req, res) => {
-  res.send('✅ Dhaba Webhook Server is Running! Ready for ManyChat.');
+  res.send('✅ Dhaba ManyChat Webhook Server is Running!<br><br>Use /webhook/order and /webhook/cash');
 });
 
 app.listen(PORT, () => {

@@ -1,85 +1,73 @@
-// ====================== Shree & Shriyan Dhaba - ManyChat Webhook Server ======================
-const express = require('express');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
 const admin = require('firebase-admin');
+require('dotenv').config();
 
-const app = express();
-app.use(express.json());
+// Keep bot alive log
+setInterval(() => {
+  console.log(`[${new Date().toLocaleString()}] Dhaba Bot is alive`);
+}, 300000); // every 5 minutes
 
-const PORT = process.env.PORT || 3000;
+// Firebase setup (use serviceAccountKey.json locally or secret in Render)
+let db;
+try {
+  const serviceAccount = require('./serviceAccountKey.json');
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  db = admin.firestore();
+  console.log("Firebase connected");
+} catch (e) {
+  console.log("Firebase not loaded yet (will work if using secret)");
+}
 
-// ====================== FIREBASE ======================
-admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  }),
-  databaseURL: "https://dhaba-bills-default-rtdb.firebaseio.com"
+const client = new Client({
+  authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' })
 });
 
-const db = admin.database();
+client.on('qr', (qr) => {
+  console.log('\n🔥 Scan this QR code with WhatsApp (Linked Devices):');
+  qrcode.generate(qr, { small: true });
+});
 
-// ====================== WEBHOOKS FOR MANYCHAT ======================
+client.on('ready', () => {
+  console.log('\n✅ Dhaba WhatsApp Bot is ONLINE and Ready! 🍛');
+});
 
-// Order Webhook
-app.post('/webhook/order', async (req, res) => {
-  try {
-    const data = req.body;
+client.on('message', async (msg) => {
+  const text = msg.body.toLowerCase().trim();
+  const from = msg.from;
 
-    const orderData = {
-      id: Date.now(),
-      table: data.table || "WhatsApp",
-      name: data.name || "Customer",
-      items: data.items || [],
-      total: data.total || 0,
-      timestamp: new Date().toLocaleString(),
-      status: "pending",
-      type: "whatsapp_order",
-      source: "manychat"
-    };
+  if (text === 'hi' || text === 'hello' || text === 'namaste') {
+    msg.reply(`👋 *Welcome to Dhaba!*\n\nType *menu* to see today's delicious menu 🍛`);
+  } 
+  else if (text === 'menu') {
+    msg.reply(`🍛 *Dhaba Special Menu Today*
 
-    await db.ref('tableOrders/' + orderData.id).set(orderData);
+1. Butter Chicken + 2 Roti     - ₹180
+2. Dal Makhani + Jeera Rice    - ₹150
+3. Paneer Butter Masala        - ₹200
+4. Special Veg Thali           - ₹220
+5. Chicken Biryani (Full)      - ₹250
+6. Gulab Jamun (2 pcs)         - ₹80
 
-    console.log('✅ Order saved from ManyChat');
-
-    res.json({ success: true, message: "Order sent to kitchen" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+Reply like: *order 1* or *order 3*`);
+  } 
+  else if (text.startsWith('order')) {
+    const item = text.replace('order', '').trim() || "Unknown";
+    if (db) {
+      await db.collection('orders').add({
+        phone: from,
+        item: item,
+        status: 'Received',
+        time: new Date().toISOString()
+      });
+    }
+    msg.reply(`✅ *Order Received!*\nItem: ${item}\nYour order is being prepared at Dhaba.\nThank you! 🙏`);
+  } 
+  else {
+    msg.reply(`Sorry, I didn't understand.\n\nType *hi* or *menu* to start.`);
   }
 });
 
-// Cash Request Webhook
-app.post('/webhook/cash', async (req, res) => {
-  try {
-    const data = req.body;
-
-    const cashData = {
-      id: Date.now(),
-      table: data.table || "WhatsApp",
-      name: data.name || "Customer",
-      items: data.items || [],
-      total: data.total || 0,
-      timestamp: new Date().toLocaleString(),
-      type: "cash_payment_notification",
-      status: "cash_pending"
-    };
-
-    await db.ref('tableOrders/' + cashData.id).set(cashData);
-
-    console.log('💵 Cash request saved');
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false });
-  }
-});
-
-// Health Check Route
-app.get('/', (req, res) => {
-  res.send('✅ Dhaba ManyChat Webhook Server is Running!<br><br>Use /webhook/order and /webhook/cash');
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Webhook server running on port ${PORT}`);
-});
+client.initialize();

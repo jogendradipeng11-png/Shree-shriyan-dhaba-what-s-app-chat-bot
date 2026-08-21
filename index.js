@@ -8,20 +8,29 @@ setInterval(() => {
   console.log(`[${new Date().toLocaleString()}] Shree Shriyan Dhaba Bot is alive 🍛`);
 }, 300000);
 
-// Firebase initialization
+// Firebase initialization (Supports local file or Render Environment Variable)
 let db;
 try {
-  const serviceAccount = require('./serviceAccountKey.json');
+  let serviceAccount;
+  
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // If running on Render, parse the JSON string from the environment variable
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    // If running locally, fall back to the local file
+    serviceAccount = require('./serviceAccountKey.json');
+  }
+
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
   db = admin.firestore();
   console.log("🔥 Firebase connected successfully!");
 } catch (e) {
-  console.log("⚠️ Firebase key not found locally. Ensure serviceAccountKey.json is present.");
+  console.log("⚠️ Firebase initialization error:", e.message);
 }
 
-// Puppeteer configuration optimized for cloud environments
+// Puppeteer configuration optimized for cloud environments (Render / Docker)
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
   puppeteer: {

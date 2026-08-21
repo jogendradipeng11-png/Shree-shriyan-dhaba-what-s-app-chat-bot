@@ -1,9 +1,24 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+const express = require('express');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
-// Firebase initialization
+// 1. Create a minimal Express server so Render detects an open port and stays alive
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('🍛 Shree Shriyan Dhaba WhatsApp Bot is running!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Express web server listening on port ${PORT}`);
+});
+
+// 2. Firebase initialization
 let db;
 try {
   let serviceAccount;
@@ -22,25 +37,29 @@ try {
   console.log("⚠️ Firebase initialization error:", e.message);
 }
 
+// 3. Start WhatsApp Bot using Baileys
 async function startDhabaBot() {
-  // Stores session data locally in a folder named 'auth_info'
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
   const sock = makeWASocket({
     auth: state,
-    printQRInTerminal: true, // Automatically prints the QR code in your logs/terminal
+    logger: pino({ level: 'silent' }), // Suppress noisy logs
   });
 
-  // Save session credentials when updated
   sock.ev.on('creds.update', saveCreds);
 
-  // Handle connection updates (reconnection logic & status)
+  // Manually handle and display the QR code in Render terminal logs
   sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
+    const { connection, lastDisconnect, qr } = update;
     
+    if (qr) {
+      console.log('\n🔥 Scan this QR code with WhatsApp (Linked Devices):');
+      qrcode.generate(qr, { small: true });
+    }
+
     if (connection === 'close') {
       const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('⚠️ Connection closed due to ', lastDisconnect?.error, ', reconnecting:', shouldReconnect);
+      console.log('⚠️ Connection closed. Reconnecting:', shouldReconnect);
       
       if (shouldReconnect) {
         startDhabaBot();
@@ -56,7 +75,6 @@ async function startDhabaBot() {
     if (!m.message || m.key.fromMe) return;
 
     const from = m.key.remoteJid;
-    // Extract message text safely (handles standard or extended text)
     const text = (m.message.conversation || m.message.extendedTextMessage?.text || '').toLowerCase().trim();
 
     if (text === 'hi' || text === 'hello' || text === 'namaste' || text === 'menu') {

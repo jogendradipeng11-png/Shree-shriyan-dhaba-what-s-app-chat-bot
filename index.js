@@ -6,7 +6,7 @@ const express = require('express');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
-// 1. Create a minimal Express server so Render detects an open port and stays alive
+// 1. Express web server for Render port binding
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -43,17 +43,18 @@ async function startDhabaBot() {
 
   const sock = makeWASocket({
     auth: state,
-    logger: pino({ level: 'silent' }), // Suppress noisy logs
+    logger: pino({ level: 'silent' }),
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  // Manually handle and display the QR code in Render terminal logs
+  // Capture connection updates and render the QR code in logs
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
     
+    // Explicitly generate text QR code when Baileys requests it
     if (qr) {
-      console.log('\n🔥 Scan this QR code with WhatsApp (Linked Devices):');
+      console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP:');
       qrcode.generate(qr, { small: true });
     }
 

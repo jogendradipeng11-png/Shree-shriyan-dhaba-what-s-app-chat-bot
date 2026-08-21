@@ -1,12 +1,12 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
-const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const express = require('express');
 const admin = require('firebase-admin');
+const readline = require('readline');
 require('dotenv').config();
 
-// 1. Express web server for Render port binding
+// Express server for Render port binding
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -18,7 +18,7 @@ app.listen(PORT, () => {
   console.log(`🌐 Express web server listening on port ${PORT}`);
 });
 
-// 2. Firebase initialization
+// Firebase initialization
 let db;
 try {
   let serviceAccount;
@@ -37,26 +37,37 @@ try {
   console.log("⚠️ Firebase initialization error:", e.message);
 }
 
-// 3. Start WhatsApp Bot using Baileys
+// Helper prompt for pairing code input if running locally, or use a default mobile number config
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const askQuestion = (query) => new Promise((resolve) => rl.question(query, resolve));
+
 async function startDhabaBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
+    browser: Browsers.macOS('Desktop') // Mimics desktop app browser
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  // Capture connection updates and render the QR code in logs
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
+  // If not registered, request a pairing code instead of relying on graphic terminal QR codes
+  if (!sock.authState.creds.registered) {
+    // Put your WhatsApp number here (with country code, e.g., 919876543210) 
+    // or let Render logs prompt you for it.
+    const phoneNumber = await askQuestion('📱 Enter your WhatsApp phone number with country code (e.g. 918847810037): ');
     
-    // Explicitly generate text QR code when Baileys requests it
-    if (qr) {
-      console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP:');
-      qrcode.generate(qr, { small: true });
-    }
+    setTimeout(async () => {
+      let code = await sock.requestPairingCode(phoneNumber.trim());
+      code = code?.match(/.{1,4}/g)?.join('-') || code;
+      console.log(`\n🔑 YOUR WHATSAPP PAIRING CODE IS: \x1b[32m${code}\x1b[0m\n`);
+      console.log('Open WhatsApp on your phone -> Settings -> Linked Devices -> Link a Device -> Link with phone number instead.');
+    }, 3000);
+  }
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
       const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -85,7 +96,6 @@ async function startDhabaBot() {
     } 
     else if (text.startsWith('order')) {
       const itemNum = text.replace('order', '').trim();
-      
       const menuItems = {
         "1": "Butter Chicken + 2 Roti (₹180)",
         "2": "Dal Makhani + Jeera Rice (₹150)",
@@ -96,13 +106,11 @@ async function startDhabaBot() {
       };
 
       const selectedItem = menuItems[itemNum];
-
       if (!selectedItem) {
         await sock.sendMessage(from, { text: `❌ Invalid choice! Please type *menu* to see valid item numbers.` });
         return;
       }
 
-      // Save Order to Firebase Firestore
       if (db) {
         try {
           await db.collection('orders').add({

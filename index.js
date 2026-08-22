@@ -3,7 +3,6 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const express = require('express');
 const admin = require('firebase-admin');
-const readline = require('readline');
 require('dotenv').config();
 
 // Express server for Render port binding
@@ -37,10 +36,6 @@ try {
   console.log("⚠️ Firebase initialization error:", e.message);
 }
 
-// Helper prompt for pairing code input if running locally, or use a default mobile number config
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const askQuestion = (query) => new Promise((resolve) => rl.question(query, resolve));
-
 async function startDhabaBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
@@ -52,17 +47,24 @@ async function startDhabaBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  // If not registered, request a pairing code instead of relying on graphic terminal QR codes
+  // If not registered, request a pairing code using the Render environment variable
   if (!sock.authState.creds.registered) {
-    // Put your WhatsApp number here (with country code, e.g., 919876543210) 
-    // or let Render logs prompt you for it.
-    const phoneNumber = await askQuestion('📱 Enter your WhatsApp phone number with country code (e.g. 918847810037): ');
+    const phoneNumber = process.env.WHATSAPP_NUMBER;
     
+    if (!phoneNumber) {
+      console.log("❌ ERROR: WHATSAPP_NUMBER environment variable is not set in Render!");
+      return;
+    }
+
     setTimeout(async () => {
-      let code = await sock.requestPairingCode(phoneNumber.trim());
-      code = code?.match(/.{1,4}/g)?.join('-') || code;
-      console.log(`\n🔑 YOUR WHATSAPP PAIRING CODE IS: \x1b[32m${code}\x1b[0m\n`);
-      console.log('Open WhatsApp on your phone -> Settings -> Linked Devices -> Link a Device -> Link with phone number instead.');
+      try {
+        let code = await sock.requestPairingCode(phoneNumber.trim());
+        code = code?.match(/.{1,4}/g)?.join('-') || code;
+        console.log(`\n🔑 YOUR WHATSAPP PAIRING CODE IS: \x1b[32m${code}\x1b[0m\n`);
+        console.log('Open WhatsApp on your phone -> Settings -> Linked Devices -> Link a Device -> Link with phone number instead.');
+      } catch (err) {
+        console.error("Failed to request pairing code:", err);
+      }
     }, 3000);
   }
 
@@ -81,56 +83,76 @@ async function startDhabaBot() {
     }
   });
 
-  // Handle Incoming Messages
+  // Handle Incoming Messages (Supports Text & Images)
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const m = messages[0];
     if (!m.message || m.key.fromMe) return;
 
     const from = m.key.remoteJid;
-    const text = (m.message.conversation || m.message.extendedTextMessage?.text || '').toLowerCase().trim();
+    
+    // Check message type and extract text or caption
+    const messageType = Object.keys(m.message)[0];
+    const text = (
+      m.message.conversation || 
+      m.message.extendedTextMessage?.text || 
+      m.message.imageMessage?.caption || 
+      ''
+    ).toLowerCase().trim();
+
+    const isImage = messageType === 'imageMessage';
 
     if (text === 'hi' || text === 'hello' || text === 'namaste' || text === 'menu') {
       await sock.sendMessage(from, {
-        text: `👋 *Welcome to Shree Shriyan Dhaba!* 🍛\n\nChoose from our special menu below:\n\n1️⃣ Butter Chicken + 2 Roti - ₹180\n2️⃣ Dal Makhani + Jeera Rice - ₹150\n3️⃣ Paneer Butter Masala - ₹200\n4️⃣ Special Veg Thali - ₹220\n5️⃣ Chicken Biryani (Full) - ₹250\n6️⃣ Gulab Jamun (2 pcs) - ₹80\n\n👉 *Reply with the number to order (e.g., type "order 1")*`
+        text: `👋 *Welcome to Shree Shriyan Dhaba!* 🍛\n\nChoose from our special menu below or send a photo of your custom order/list:\n\n1️⃣ Butter Chicken + 2 Roti - ₹180\n2️⃣ Dal Makhani + Jeera Rice - ₹150\n3️⃣ Paneer Butter Masala - ₹200\n4️⃣ Special Veg Thali - ₹220\n5️⃣ Chicken Biryani (Full) - ₹250\n6️⃣ Gulab Jamun (2 pcs) - ₹80\n\n👉 *Reply with the number to order (e.g., type "order 1") or send a photo!*`
       });
     } 
-    else if (text.startsWith('order')) {
-      const itemNum = text.replace('order', '').trim();
-      const menuItems = {
-        "1": "Butter Chicken + 2 Roti (₹180)",
-        "2": "Dal Makhani + Jeera Rice (₹150)",
-        "3": "Paneer Butter Masala (₹200)",
-        "4": "Special Veg Thali (₹220)",
-        "5": "Chicken Biryani (Full) - ₹250",
-        "6": "Gulab Jamun (2 pcs) - ₹80"
-      };
+    else if (text.startsWith('order') || isImage) {
+      let orderDescription = "";
 
-      const selectedItem = menuItems[itemNum];
-      if (!selectedItem) {
+      if (isImage) {
+        orderDescription = `[Image Order] ${text ? 'Caption: ' + text : 'No caption provided'}`;
+      } else {
+        const itemNum = text.replace('order', '').trim();
+        const menuItems = {
+          "1": "Butter Chicken + 2 Roti (₹180)",
+          "2": "Dal Makhani + Jeera Rice (₹150)",
+          "3": "Paneer Butter Masala (₹200)",
+          "4": "Special Veg Thali (₹220)",
+          "5": "Chicken Biryani (Full) - ₹250",
+          "6": "Gulab Jamun (2 pcs) - ₹80"
+        };
+        orderDescription = menuItems[itemNum];
+      }
+
+      if (!orderDescription && !isImage) {
         await sock.sendMessage(from, { text: `❌ Invalid choice! Please type *menu* to see valid item numbers.` });
         return;
       }
 
+      // Save order to Firestore Database
       if (db) {
         try {
           await db.collection('orders').add({
             phone: from,
-            item: selectedItem,
+            orderItem: orderDescription || "Custom Image Order",
+            type: isImage ? 'image' : 'text',
             status: 'Received',
             time: new Date().toISOString()
           });
+          console.log("🔥 Order saved to Firestore successfully!");
         } catch (err) {
           console.error("Error saving order to Firestore:", err);
         }
       }
 
+      // Send confirmation back to customer
       await sock.sendMessage(from, {
-        text: `✅ *Order Received Successfully!*\n\n🍽️ *Item:* ${selectedItem}\n📍 *Status:* Being prepared at Shree Shriyan Dhaba.\n\nThank you for ordering with us! 🙏`
+        text: `✅ *Order Received Successfully!*\n\n🍽️ *Details:* ${orderDescription || 'Custom Image Menu'}\n📍 *Status:* Being prepared at Shree Shriyan Dhaba.\n\nThank you for ordering with us! 🙏`
       });
     } 
     else if (text.length > 0) {
       await sock.sendMessage(from, {
-        text: `🤖 Sorry, I didn't understand that.\n\nType *menu* to see our dishes or *hi* to restart.`
+        text: `🤖 Sorry, I didn't understand that.\n\nType *menu* to see our dishes, or send a photo of your order!`
       });
     }
   });

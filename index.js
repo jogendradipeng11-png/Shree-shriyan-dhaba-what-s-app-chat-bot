@@ -5,7 +5,6 @@ const express = require('express');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
-// Express server for Render port binding
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -36,23 +35,85 @@ try {
   console.log("⚠️ Firebase initialization error:", e.message);
 }
 
+// Custom Firestore Auth State Adapter for Baileys to persist login on Render
+const useFirestoreAuthState = async (database) => {
+  const writeData = async (data, id) => {
+    try {
+      await database.collection('whatsapp_sessions').doc(id).set({ data: JSON.stringify(data) });
+    } catch (error) {
+      console.error(`Error saving auth data for ${id}:`, error);
+    }
+  };
+
+  const readData = async (id) => {
+    try {
+      const doc = await database.collection('whatsapp_sessions').doc(id).get();
+      if (doc.exists) {
+        return JSON.parse(doc.data().data);
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error reading auth data for ${id}:`, error);
+      return null;
+    }
+  };
+
+  const creds = (await readData('creds')) || (await useMultiFileAuthState('./temp_auth')).state.creds;
+
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const data = {};
+          for (const id of ids) {
+            let value = await readData(`${type}-${id}`);
+            if (type === 'app-state-sync-key' && value) {
+              value = Buffer.from(value);
+            }
+            data[id] = value;
+          }
+          return data;
+        },
+        set: async (data) => {
+          const tasks = [];
+          for (const category of Object.keys(data)) {
+            for (const id of Object.keys(data[category])) {
+              const value = data[category][id];
+              tasks.push(writeData(value, `${category}-${id}`));
+            }
+          }
+          await Promise.all(tasks);
+        }
+      }
+    },
+    saveCreds: () => {
+      return writeData(state.creds, 'creds');
+    }
+  };
+};
+
 async function startDhabaBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+  if (!db) {
+    console.log("❌ Database not ready, waiting for Firebase...");
+    setTimeout(startDhabaBot, 5000);
+    return;
+  }
+
+  const { state, saveCreds } = await useFirestoreAuthState(db);
 
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
-    browser: Browsers.macOS('Desktop') // Mimics desktop app browser
+    browser: Browsers.macOS('Desktop')
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  // If not registered, request a pairing code using the Render environment variable
   if (!sock.authState.creds.registered) {
     const phoneNumber = process.env.WHATSAPP_NUMBER;
-    
     if (!phoneNumber) {
-      console.log("❌ ERROR: WHATSAPP_NUMBER environment variable is not set in Render!");
+      console.log("❌ ERROR: WHATSAPP_NUMBER environment variable is not set!");
       return;
     }
 
@@ -60,12 +121,13 @@ async function startDhabaBot() {
       try {
         let code = await sock.requestPairingCode(phoneNumber.trim());
         code = code?.match(/.{1,4}/g)?.join('-') || code;
-        console.log(`\n🔑 YOUR WHATSAPP PAIRING CODE IS: \x1b[32m${code}\x1b[0m\n`);
-        console.log('Open WhatsApp on your phone -> Settings -> Linked Devices -> Link a Device -> Link with phone number instead.');
+        console.log(`\n==================================================`);
+        console.log(`🔑 YOUR PAIRING CODE IS: \x1b[32m${code}\x1b[0m`);
+        console.log(`==================================================\n`);
       } catch (err) {
         console.error("Failed to request pairing code:", err);
       }
-    }, 3000);
+    }, 4000);
   }
 
   sock.ev.on('connection.update', (update) => {
@@ -79,18 +141,15 @@ async function startDhabaBot() {
         startDhabaBot();
       }
     } else if (connection === 'open') {
-      console.log('✅ Shree Shriyan Dhaba Baileys Bot is ONLINE and Ready! 🍛');
+      console.log('✅ Shree Shriyan Dhaba Baileys Bot is ONLINE and Linked! 🍛');
     }
   });
 
-  // Handle Incoming Messages (Supports Text & Images)
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const m = messages[0];
     if (!m.message || m.key.fromMe) return;
 
     const from = m.key.remoteJid;
-    
-    // Check message type and extract text or caption
     const messageType = Object.keys(m.message)[0];
     const text = (
       m.message.conversation || 
@@ -129,7 +188,6 @@ async function startDhabaBot() {
         return;
       }
 
-      // Save order to Firestore Database
       if (db) {
         try {
           await db.collection('orders').add({
@@ -145,7 +203,6 @@ async function startDhabaBot() {
         }
       }
 
-      // Send confirmation back to customer
       await sock.sendMessage(from, {
         text: `✅ *Order Received Successfully!*\n\n🍽️ *Details:* ${orderDescription || 'Custom Image Menu'}\n📍 *Status:* Being prepared at Shree Shriyan Dhaba.\n\nThank you for ordering with us! 🙏`
       });

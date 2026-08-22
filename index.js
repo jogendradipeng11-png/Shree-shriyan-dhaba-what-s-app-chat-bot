@@ -16,12 +16,14 @@ app.listen(PORT, () => {
   console.log(`🌐 Express web server listening on port ${PORT}`);
 });
 
-// Firebase initialization
+// Firebase initialization with error checking
 let db;
 try {
   let serviceAccount;
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    // Clean up potential formatting issues from Render environment variables
+    let rawEnv = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+    serviceAccount = JSON.parse(rawEnv);
   } else {
     serviceAccount = require('./serviceAccountKey.json');
   }
@@ -35,72 +37,9 @@ try {
   console.log("⚠️ Firebase initialization error:", e.message);
 }
 
-// Custom Firestore Auth State Adapter for Baileys to persist login on Render
-const useFirestoreAuthState = async (database) => {
-  const writeData = async (data, id) => {
-    try {
-      await database.collection('whatsapp_sessions').doc(id).set({ data: JSON.stringify(data) });
-    } catch (error) {
-      console.error(`Error saving auth data for ${id}:`, error);
-    }
-  };
-
-  const readData = async (id) => {
-    try {
-      const doc = await database.collection('whatsapp_sessions').doc(id).get();
-      if (doc.exists) {
-        return JSON.parse(doc.data().data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Error reading auth data for ${id}:`, error);
-      return null;
-    }
-  };
-
-  const creds = (await readData('creds')) || (await useMultiFileAuthState('./temp_auth')).state.creds;
-
-  return {
-    state: {
-      creds,
-      keys: {
-        get: async (type, ids) => {
-          const data = {};
-          for (const id of ids) {
-            let value = await readData(`${type}-${id}`);
-            if (type === 'app-state-sync-key' && value) {
-              value = Buffer.from(value);
-            }
-            data[id] = value;
-          }
-          return data;
-        },
-        set: async (data) => {
-          const tasks = [];
-          for (const category of Object.keys(data)) {
-            for (const id of Object.keys(data[category])) {
-              const value = data[category][id];
-              tasks.push(writeData(value, `${category}-${id}`));
-            }
-          }
-          await Promise.all(tasks);
-        }
-      }
-    },
-    saveCreds: () => {
-      return writeData(state.creds, 'creds');
-    }
-  };
-};
-
 async function startDhabaBot() {
-  if (!db) {
-    console.log("❌ Database not ready, waiting for Firebase...");
-    setTimeout(startDhabaBot, 5000);
-    return;
-  }
-
-  const { state, saveCreds } = await useFirestoreAuthState(db);
+  // Using local folder auth state (Render ephemeral storage will require re-linking if service restarts)
+  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
   const sock = makeWASocket({
     auth: state,
@@ -141,7 +80,7 @@ async function startDhabaBot() {
         startDhabaBot();
       }
     } else if (connection === 'open') {
-      console.log('✅ Shree Shriyan Dhaba Baileys Bot is ONLINE and Linked! 🍛');
+      console.log('✅ Shree Shriyan Dhaba Baileys Bot is ONLINE and Ready! 🍛');
     }
   });
 
